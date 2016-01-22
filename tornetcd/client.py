@@ -3,19 +3,12 @@
 # Created by qingyun.meng on 16/1/19.
 
 """
-.. module:: tornetcd
-   :synopsis: A python async-etcd client.
+tornetcd
+A python async-etcd client.
 
 
 
 """
-try:
-    # Python 3
-    from http.client import HTTPException
-except ImportError:
-    # Python 2
-    from httplib import HTTPException
-import sys
 import json
 import random
 from copy import copy
@@ -31,6 +24,7 @@ from tornado.log import gen_log as _log
 from tornado.httpclient import HTTPRequest, HTTPError
 from tornado.httputil import urlencode, url_concat
 from tornado.concurrent import return_future, Future
+from tornado import gen
 from tornado.ioloop import PeriodicCallback
 from etcd_result import EtcdResult
 from . import exceptions as etcdexcept
@@ -195,6 +189,56 @@ class Client(object):
         future = self.api_execute(self.version_prefix + '/members', self._MGET)
         self.ioloop.add_future(future, cb)
 
+    @gen.coroutine
+    def leader(self):
+        """
+        Returns:
+            dict. the leader of the cluster.
+
+        >>> print client.leader
+        {"id":"ce2a822cea30bfca","name":"default","peerURLs":["http://localhost:2380","http://localhost:7001"],"clientURLs":["http://127.0.0.1:4001"]}
+        """
+        stats = yield self._stats()
+        leader_info = yield self.get_members()
+        raise gen.Return(leader_info[stats['leaderInfo']['leader']])
+
+    def stats(self, callback=None):
+        """
+        Returns:
+            dict. the stats of the local server
+        """
+        return self._stats(callback=callback)
+
+    def leader_stats(self, callback=None):
+        """
+        Returns:
+            dict. the stats of the leader
+        """
+        return self._stats('leader', callback)
+
+    def store_stats(self, callback=None):
+        """
+        Returns:
+           dict. the stats of the kv store
+        """
+        return self._stats('store', callback)
+
+    @return_future
+    def _stats(self, what='self', callback=None):
+        """ Internal method to access the stats endpoints"""
+        fut = self.api_execute(self.version_prefix
+                               + '/stats/' + what, self._MGET)
+
+        def _cb(fut):
+            data = fut.result()
+            try:
+                data = data.body.decode('utf-8')
+                callback(json.loads(data))
+            except (TypeError, ValueError):
+                raise etcdexcept.EtcdException("Cannot parse json data in the response")
+
+        self.ioloop.add_future(fut, _cb)
+
     @property
     def key_endpoint(self):
         """
@@ -274,7 +318,7 @@ class Client(object):
         fut = self.api_execute(path, method, params=params)
         self.ioloop.add_future(fut, cb)
 
-    def update(self, obj):
+    def update(self, obj, callback=None):
         """
         Updates the value for a key atomically. Typical usage would be:
 
@@ -300,7 +344,7 @@ class Client(object):
         if not obj.dir:
             # prevIndex on a dir causes a 'not a file' error. d'oh!
             kwdargs['prevIndex'] = obj.modifiedIndex
-        return self.write(obj.key, obj.value, **kwdargs)
+        return self.write(obj.key, obj.value, callback=callback, **kwdargs)
 
     @return_future
     def read(self, key, callback=None, **kwargs):
@@ -561,9 +605,9 @@ class Client(object):
             global local_index
             local_index = response.modifiedIndex + 1
             callback(response)
-            self.watch(key, index=local_index, timeout=sys.maxint, recursive=recursive, callback=_cb)
+            self.watch(key, index=local_index, timeout=0, recursive=recursive, callback=_cb)
 
-        return self.watch(key, index=local_index, timeout=sys.maxint, recursive=recursive, callback=_cb)
+        return self.watch(key, index=local_index, timeout=0, recursive=recursive, callback=_cb)
 
     def _result_from_response(self, response):
         """ 创建一个EtcdResult """
@@ -589,9 +633,6 @@ class Client(object):
 
             if timeout is None:
                 timeout = self.read_timeout
-
-            if timeout == 0:
-                timeout = None
 
             if not path.startswith('/'):
                 raise ValueError('Path does not start with /')

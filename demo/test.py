@@ -6,7 +6,7 @@ import time
 from tornetcd import Client, EtcdResult
 from tornado import ioloop, httpclient, gen, options
 from functools import partial
-
+from tornado.gen import sleep
 
 def setUp(self):
     self.ioloop = ioloop.IOLoop.instance()
@@ -23,9 +23,11 @@ def get_coroutine(func, *args, **kwargs):
 
     return run
 
-
+@gen.coroutine
 def callback(response):
     print response.value
+    print 'processing'
+    yield sleep(5)
     print 'key change'
 
 
