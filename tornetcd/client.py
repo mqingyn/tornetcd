@@ -49,7 +49,11 @@ class Client(object):
                  allow_reconnect=True, allow_redirect=True, protocol='http', cert_options=None,
                  username=None, password=None, use_proxies=False, expected_cluster_id=None, ioloop=None,
                  httpclient=None):
+        if not ioloop:
+            raise etcdexcept.EtcdException("ioloop is None.")
 
+        if not httpclient:
+            raise etcdexcept.EtcdException("httpclient is None.")
         self._protocol = protocol
         self.ioloop = ioloop
 
