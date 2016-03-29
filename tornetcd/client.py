@@ -68,7 +68,7 @@ class Client(object):
         self._allow_redirect = allow_redirect
         self._use_proxies = use_proxies
 
-        self.cert_options = cert_options
+        self.cert_options = cert_options or {}
 
         self.username = None
         self.password = None
@@ -696,25 +696,30 @@ class Client(object):
     def api_execute(self, path, method, params=None, timeout=None):
         """ Executes the query. """
         url = self._base_url + path
+
+        validate_cert = True if self.cert_options else False
         if (method == self._MGET) or (method == self._MDELETE):
             if params:
                 url = url_concat(url, params)
-            request = HTTPRequest(url, method=method,
-                                  request_timeout=timeout,
-                                  headers=self._get_default_headers(method),
-                                  follow_redirects=self.allow_redirect,
-                                  ssl_options=self.cert_options)
+            body = None
 
         elif (method == self._MPUT) or (method == self._MPOST):
-            request = HTTPRequest(url, method=method,
-                                  request_timeout=timeout,
-                                  headers=self._get_default_headers(method),
-                                  body=urlencode(params),
-                                  follow_redirects=self.allow_redirect,
-                                  ssl_options=self.cert_options)
+            body = urlencode(params)
+
         else:
             raise etcdexcept.EtcdException(
                     'HTTP method {} not supported'.format(method))
+        request = HTTPRequest(url, method=method,
+                              request_timeout=timeout,
+                              headers=self._get_default_headers(method),
+                              follow_redirects=self.allow_redirect,
+                              body=body,
+                              validate_cert=validate_cert,
+                              ca_certs=self.cert_options.get('ca_certs', None),
+                              client_key=self.cert_options.get('client_key', None),
+                              client_cert=self.cert_options.get('client_cert', None),
+                              auth_username=self.username,
+                              auth_password=self.password)
         _log.debug("Request %s %s %s" % (path, method, request.body))
         return self.http.fetch(request)
 
@@ -724,12 +729,19 @@ class Client(object):
         json_payload = json.dumps(params)
         headers = self._get_default_headers(method)
         headers['Content-Type'] = 'application/json'
+        validate_cert = True if self.cert_options else False
         request = HTTPRequest(url, method=method,
                               request_timeout=timeout,
                               headers=headers,
                               body=json_payload,
                               follow_redirects=self.allow_redirect,
-                              ssl_options=self.cert_options)
+                              ssl_options=self.cert_options,
+                              validate_cert=validate_cert,
+                              ca_certs=self.cert_options.get('ca_certs', None),
+                              client_key=self.cert_options.get('client_key', None),
+                              client_cert=self.cert_options.get('client_cert', None),
+                              auth_username=self.username,
+                              auth_password=self.password)
 
         return self.http.fetch(request)
 
