@@ -750,7 +750,6 @@ class Client(object):
                               headers=headers,
                               body=json_payload,
                               follow_redirects=self.allow_redirect,
-                              ssl_options=self.cert_options,
                               validate_cert=validate_cert,
                               ca_certs=self.cert_options.get('ca_certs', None),
                               client_key=self.cert_options.get('client_key', None),
