@@ -412,7 +412,6 @@ class Client(object):
         timeout = kwargs.get('timeout', None)
 
         def cb(fut):
-
             callback(self._result_from_response(fut.result()))
 
         fut = self.api_execute(self.key_endpoint + key, self._MGET, params=params, timeout=timeout)
@@ -598,7 +597,7 @@ class Client(object):
             return self.read(key, wait=True, timeout=timeout,
                              recursive=recursive, callback=callback)
 
-    def eternal_watch(self, key, index=None, recursive=None, callback=None):
+    def eternal_watch(self, key, index=None, recursive=None, callback=None, timeout=0):
         # todo
         """
         持续的watch一个key
@@ -617,16 +616,28 @@ class Client(object):
         value1
         value2
 
+
         """
-        local_index = index
+        local_index = [index]
 
-        def _cb(response):
-            global local_index
-            local_index = response.modifiedIndex + 1
-            callback(response)
-            self.watch(key, index=local_index, timeout=0, recursive=recursive, callback=_cb)
+        def watch_again(_cb):
+            fut = self.watch(key, index=local_index[0], timeout=timeout, recursive=recursive)
+            self.ioloop.add_future(fut, _cb)
+            return fut
 
-        return self.watch(key, index=local_index, timeout=0, recursive=recursive, callback=_cb)
+        def _cb(future):
+            exc = future.exception()
+
+            if not exc:
+                response = future.result()
+                local_index[0] = response.modifiedIndex + 1
+                callback(response)
+                watch_again(_cb)
+            else:
+                _log.warning(exc)
+                watch_again(_cb)
+
+        return watch_again(_cb)
 
     def _result_from_response(self, response):
         """ 创建一个EtcdResult """
@@ -662,23 +673,26 @@ class Client(object):
             new_future = Future()
 
             def _callback(fut):
-                exc = fut.exc_info()
-                if exc:
-                    exc_obj = exc[1]
+                exc_obj = fut.exception()
+                if exc_obj:
                     if isinstance(exc_obj, HTTPError) and exc_obj.code < 500:
-                        result = self._handle_server_response(exc_obj.response)
-                        new_future.set_result(result)
+                        try:
+                            self._handle_server_response(exc_obj.response)
+                        except Exception, ex:
+                            new_future.set_exception(ex)
                         return
                     elif (isinstance(exc_obj, HTTPError) and exc_obj.code > 500) or isinstance(exc_obj, socket.error):
                         _log.error("Request to server %s failed: %r",
                                    self._base_url, exc_obj)
                         if isinstance(params, dict) and params.get("wait") == "true":
                             _log.debug("Watch timed out.")
-                            raise etcdexcept.EtcdWatchTimedOut(
+                            exc = etcdexcept.EtcdWatchTimedOut(
                                     "Watch timed out: %r" % exc_obj,
                                     cause=exc_obj
                             )
-                        if self._allow_reconnect and fut._retry:
+                            new_future.set_exception(exc)
+                            return
+                        elif self._allow_reconnect and fut._retry:
                             _log.info("Reconnection allowed, looking for another "
                                       "server.")
                             self._base_url = fut._retry.pop(0)
@@ -689,17 +703,20 @@ class Client(object):
 
                         else:
                             _log.debug("Reconnection disabled, giving up.")
-                            raise etcdexcept.EtcdConnectionFailed(
+                            exc = etcdexcept.EtcdConnectionFailed(
                                     "Connection to etcd failed due to %r" % exc_obj,
                                     cause=exc_obj
                             )
+                            new_future.set_exception(exc)
 
                     else:
                         _log.exception("Unexpected request failure.")
+                        exc = etcdexcept.EtcdException(exc_obj.message)
+                        new_future.set_exception(exc)
 
                 result = fut.result()
                 self._check_cluster_id(result)
-                result = self._handle_server_response(fut.result())
+                result = self._handle_server_response(result)
                 new_future.set_result(result)
 
             IOLoop.current().add_future(fut, _callback)
