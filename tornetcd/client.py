@@ -58,9 +58,11 @@ class Client(object):
         self.ioloop = ioloop
 
         if not isinstance(host, (tuple, list)):
-            self._machines_cache = []
+            hosts = [host]
         else:
-            self._machines_cache = [self._uri(self._protocol, conn) for conn in host]
+            hosts = host
+
+        self._machines_cache = [self._uri(self._protocol, conn) for conn in hosts]
 
         self.version_prefix = version_prefix
         self._allow_reconnect = allow_reconnect
@@ -254,6 +256,19 @@ class Client(object):
         if not key.startswith('/'):
             key = "/{}".format(key)
         return key
+
+    @gen.coroutine
+    def contains(self, key):
+        """
+        Check if a key is available in the cluster.
+        >>> print 'key' in client
+        True
+        """
+        try:
+            yield self.get(key)
+            raise gen.Return(True)
+        except etcdexcept.EtcdKeyNotFound:
+            raise gen.Return(False)
 
     @return_future
     def write(self, key, value, ttl=None, dir=False, append=False, callback=None, **kwdargs):
