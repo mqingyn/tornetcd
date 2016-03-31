@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # Created by qingyun.meng on 16/1/19.
 __author__ = 'mqingyn'
-__version__ = '0.1.1'
+__version__ = '0.1.2'
 
 version = tuple(map(int, __version__.split('.')))
 from client import Client
