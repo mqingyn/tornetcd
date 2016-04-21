@@ -271,6 +271,37 @@ class Client(object):
             raise gen.Return(False)
 
     @return_future
+    def refresh_ttl(self, key, ttl=None, callback=None, **kwdargs):
+        """
+        refresh ttl for a key
+        """
+        _log.debug("Refresh key %s ttl=%s", key, ttl)
+        key = self._sanitize_key(key)
+        params = {"refresh":"true"}
+
+        if ttl is not None:
+            params['ttl'] = ttl
+
+
+        for (k, v) in kwdargs.items():
+            if k in self._comparison_conditions:
+                if type(v) == bool:
+                    params[k] = v and "true" or "false"
+                else:
+                    params[k] = v
+
+        if '_endpoint' in kwdargs:
+            path = kwdargs['_endpoint'] + key
+        else:
+            path = self.key_endpoint + key
+
+        def cb(fut):
+            callback(self._result_from_response(fut.result()))
+
+        fut = self.api_execute(path, self._MPUT, params=params)
+        self.ioloop.add_future(fut, cb)
+
+    @return_future
     def write(self, key, value, ttl=None, dir=False, append=False, callback=None, **kwdargs):
         """
         Writes the value for a key, possibly doing atomit Compare-and-Swap
