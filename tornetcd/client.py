@@ -5,9 +5,6 @@
 """
 tornetcd
 A python async-etcd client.
-
-
-
 """
 import json
 import random
@@ -19,7 +16,6 @@ try:
 except ImportError:
     from urllib.parse import urlparse
 from functools import wraps
-from tornado.ioloop import IOLoop
 from tornado.log import gen_log as _log
 from tornado.httpclient import HTTPRequest, HTTPError
 from tornado.httputil import urlencode, url_concat
@@ -55,7 +51,11 @@ class Client(object):
         if not httpclient:
             raise etcdexcept.EtcdException("httpclient is None.")
         self._protocol = protocol
-        self.ioloop = ioloop
+        if not ioloop:
+            from tornado.ioloop import IOLoop
+            self.ioloop = IOLoop.current()
+        else:
+            self.ioloop = ioloop
 
         if not isinstance(host, (tuple, list)):
             hosts = [host]
@@ -277,11 +277,10 @@ class Client(object):
         """
         _log.debug("Refresh key %s ttl=%s", key, ttl)
         key = self._sanitize_key(key)
-        params = {"refresh":"true"}
+        params = {"refresh": "true"}
 
         if ttl is not None:
             params['ttl'] = ttl
-
 
         for (k, v) in kwdargs.items():
             if k in self._comparison_conditions:
@@ -750,7 +749,7 @@ class Client(object):
                 result = self._handle_server_response(result)
                 new_future.set_result(result)
 
-            IOLoop.current().add_future(fut, _callback)
+            self.ioloop.add_future(fut, _callback)
             return new_future
 
         return wrapper
