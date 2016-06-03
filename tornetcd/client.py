@@ -664,8 +664,12 @@ class Client(object):
                 callback(response)
                 watch_again(_cb)
             else:
-                _log.warning(exc)
-                watch_again(_cb)
+                if isinstance(exc, etcdexcept.EtcdWatchTimedOut):
+                    _log.info("Connection recycle on timeout,Create new watch.")
+                    watch_again(_cb)
+                else:
+                    _log.error(exc.message)
+                    self.ioloop.call_later(5, watch_again, _cb)
 
         return watch_again(_cb)
 
