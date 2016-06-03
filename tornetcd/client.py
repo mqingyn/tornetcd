@@ -718,7 +718,7 @@ class Client(object):
                     elif (isinstance(exc_obj, HTTPError) and exc_obj.code > 500) or isinstance(exc_obj, socket.error):
                         _log.error("Request to server %s failed: %r",
                                    self._base_url, exc_obj)
-                        if isinstance(params, dict) and params.get("wait") == "true":
+                        if isinstance(params, dict) and params.get("wait") == "true" and "timeout" in str(exc_obj.message).lower():
                             _log.debug("Watch timed out.")
                             exc = etcdexcept.EtcdWatchTimedOut(
                                     "Watch timed out: %r" % exc_obj,
