@@ -703,7 +703,8 @@ class Client(object):
             fut = func(self, path, method, params=params, timeout=timeout)
             if self._allow_reconnect:
                 fut._retry = copy(self._machines_cache)
-                fut._retry.remove(self._base_url)
+                if self._base_url in fut._retry:
+                    fut._retry.remove(self._base_url)
             new_future = Future()
 
             def _callback(fut):
@@ -743,11 +744,13 @@ class Client(object):
                                     cause=exc_obj
                             )
                             new_future.set_exception(exc)
+                            return
 
                     else:
                         _log.exception("Unexpected request failure.")
                         exc = etcdexcept.EtcdException(exc_obj.message)
                         new_future.set_exception(exc)
+                        return
 
                 result = fut.result()
                 self._check_cluster_id(result)
@@ -758,6 +761,7 @@ class Client(object):
             return new_future
 
         return wrapper
+
 
     @_request_wrapper
     def api_execute(self, path, method, params=None, timeout=None):
