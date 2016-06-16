@@ -661,8 +661,8 @@ class Client(object):
             if not exc:
                 response = future.result()
                 local_index[0] = response.modifiedIndex + 1
-                callback(response)
                 watch_again(_cb)
+                callback(response)
             else:
                 if isinstance(exc, etcdexcept.EtcdWatchTimedOut):
                     _log.info("Connection recycle on timeout,Create new watch.")
@@ -756,6 +756,9 @@ class Client(object):
                 self._check_cluster_id(result)
                 result = self._handle_server_response(result)
                 new_future.set_result(result)
+                new_url = self._choice_machine()
+                if new_url:
+                    self._base_url = new_url
 
             self.ioloop.add_future(fut, _callback)
             return new_future
